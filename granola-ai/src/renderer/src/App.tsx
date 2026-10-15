@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
 import { ServiceProvider, useGranolaService } from "@/services/ServiceContext"
-import { FolderItem, RecentNoteItem } from "@/services/granolaService"
+import { FolderItem, RecentNoteItem, UpcomingMeetingItem } from "@/services/granolaService"
 import { DesktopShell } from "@/components/desktop-shell"
 import { CommandPalette } from "@/components/command-palette"
+import { HomeDashboard } from "@/components/home-dashboard"
 import { FileText, Folder, Mic, Sparkles } from "lucide-react"
 
 function GranolaWorkspace() {
@@ -13,10 +14,12 @@ function GranolaWorkspace() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false)
   const [folders, setFolders] = useState<FolderItem[]>([])
   const [recentNotes, setRecentNotes] = useState<RecentNoteItem[]>([])
+  const [upcomingMeetings, setUpcomingMeetings] = useState<UpcomingMeetingItem[]>([])
 
   useEffect(() => {
     service.getFolders().then(setFolders)
     service.getRecentNotes().then(setRecentNotes)
+    service.getUpcomingMeetings().then(setUpcomingMeetings)
   }, [service])
 
   // Global Cmd+K / Ctrl+K keyboard shortcut
@@ -33,6 +36,14 @@ function GranolaWorkspace() {
 
   const handleNewNote = async () => {
     const created = await service.createNewNote()
+    const updated = await service.getRecentNotes()
+    setRecentNotes(updated)
+    setActiveView(`note:${created.id}`)
+    setIsRecording(true)
+  }
+
+  const handleTakeNotesForMeeting = async (meeting: UpcomingMeetingItem) => {
+    const created = await service.createNewNote(meeting.title)
     const updated = await service.getRecentNotes()
     setRecentNotes(updated)
     setActiveView(`note:${created.id}`)
@@ -142,49 +153,15 @@ function GranolaWorkspace() {
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="pb-1">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-2">
-                <Sparkles className="size-3" /> Granola AI Desktop
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                All Notes
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground max-w-xl leading-relaxed">
-                Navigation is live and connected to your swappable <strong>{backendMode.toUpperCase()}</strong> service. Toggle the sidebar anytime with <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">⌘B</kbd> or <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">Ctrl+B</kbd>.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Recent Notes
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {recentNotes.map((note) => (
-                  <button
-                    key={note.id}
-                    type="button"
-                    onClick={() => setActiveView(`note:${note.id}`)}
-                    className="flex flex-col items-start justify-between p-4 rounded-xl border bg-card hover:border-sidebar-ring/40 hover:shadow-xs transition text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2 w-full">
-                      {note.isRecording ? (
-                        <Mic className="size-4 shrink-0 text-emerald-500 animate-pulse" />
-                      ) : (
-                        <FileText className="size-4 shrink-0 text-muted-foreground" />
-                      )}
-                      <span className="font-medium text-sm text-foreground truncate">
-                        {note.title}
-                      </span>
-                    </div>
-                    <span className="mt-2 text-xs text-muted-foreground">
-                      {note.dateLabel}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <HomeDashboard
+            upcomingMeetings={upcomingMeetings}
+            recentNotes={recentNotes}
+            folders={folders}
+            onSelectNote={(noteId) => setActiveView(`note:${noteId}`)}
+            onTakeNotesForMeeting={handleTakeNotesForMeeting}
+            onNewNote={handleNewNote}
+            backendMode={backendMode}
+          />
         )}
       </div>
 
