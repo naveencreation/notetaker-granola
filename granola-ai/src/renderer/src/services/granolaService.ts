@@ -48,6 +48,14 @@ export interface EnhancedNotesData {
   nextSteps?: string
 }
 
+export interface TranscriptSegment {
+  id: string
+  timestamp: string
+  speaker: string
+  isSelf: boolean
+  text: string
+}
+
 export interface RecentNoteItem {
   id: string
   title: string
@@ -59,6 +67,7 @@ export interface RecentNoteItem {
   template?: string
   roughNotes?: string
   enhancedNotes?: EnhancedNotesData
+  transcript?: TranscriptSegment[]
 }
 
 export interface IGranolaService {
@@ -157,6 +166,71 @@ export class MockGranolaService implements IGranolaService {
         ],
         nextSteps: "Follow up with Sarah on Friday with the signed DPA and scheduling link.",
       },
+      transcript: [
+        {
+          id: "t1",
+          timestamp: "00:15",
+          speaker: "You",
+          isSelf: true,
+          text: "Thanks for jumping on today, Sarah and Dave. We're looking to review the VPC network isolation and finalize the Q4 enterprise deployment timeline.",
+        },
+        {
+          id: "t2",
+          timestamp: "01:05",
+          speaker: "Sarah Lin",
+          isSelf: false,
+          text: "Glad to be here. Dave and I went through the technical specs earlier this morning. The main milestone for us is getting SAML SSO enforced before our internal compliance audit.",
+        },
+        {
+          id: "t3",
+          timestamp: "04:12",
+          speaker: "Dave Miller",
+          isSelf: false,
+          text: "We finished the VPC peering routes yesterday and latency benchmarks came back under 8ms. We're feeling very solid on the AWS us-east-1 connection.",
+        },
+        {
+          id: "t4",
+          timestamp: "06:30",
+          speaker: "You",
+          isSelf: true,
+          text: "That sub-8ms latency is fantastic. On the SSO side, does your team use Okta or Azure AD for identity provisioning?",
+        },
+        {
+          id: "t5",
+          timestamp: "08:45",
+          speaker: "Dave Miller",
+          isSelf: false,
+          text: "We use Okta SAML 2.0. Let's lock in Oct 24 for the Okta SAML connector so IT can provision user groups in one batch.",
+        },
+        {
+          id: "t6",
+          timestamp: "11:20",
+          speaker: "Sarah Lin",
+          isSelf: false,
+          text: "The pricing tier works within our Q4 budget, provided the SLA includes 24/7 dedicated Slack support.",
+        },
+        {
+          id: "t7",
+          timestamp: "12:15",
+          speaker: "Dave Miller",
+          isSelf: false,
+          text: "I'll upload the metadata XML to your staging environment before Monday morning.",
+        },
+        {
+          id: "t8",
+          timestamp: "13:30",
+          speaker: "Sarah Lin",
+          isSelf: false,
+          text: "Send over the updated MSA by Thursday so our legal counsel can turn around revisions by Friday.",
+        },
+        {
+          id: "t9",
+          timestamp: "14:10",
+          speaker: "You",
+          isSelf: true,
+          text: "Sounds like a plan. I will have the DPA, revised MSA, and security whitepaper in your inbox tomorrow. Thanks both!",
+        },
+      ],
     },
     {
       id: "note-2",

@@ -5,6 +5,9 @@ import {
   RecentNoteItem,
 } from "@/services/granolaService"
 import { useGranolaService } from "@/services/ServiceContext"
+import { LiveTranscriptDrawer } from "@/components/live-transcript-drawer"
+import { AskGranolaDrawer } from "@/components/ask-granola-drawer"
+import { ShareExportDialog } from "@/components/share-export-dialog"
 import {
   Calendar,
   Clock,
@@ -19,6 +22,9 @@ import {
   Quote,
   X,
   User,
+  Volume2,
+  ArrowRight,
+  Share2,
 } from "lucide-react"
 
 interface NoteEditorProps {
@@ -55,6 +61,11 @@ export function NoteEditor({
   const [isEnhancing, setIsEnhancing] = useState<boolean>(false)
   const [activeCitation, setActiveCitation] = useState<CitationItem | null>(null)
   const [copied, setCopied] = useState<boolean>(false)
+  const [transcriptOpen, setTranscriptOpen] = useState<boolean>(false)
+  const [highlightTimestamp, setHighlightTimestamp] = useState<string | null>(null)
+  const [askGranolaOpen, setAskGranolaOpen] = useState<boolean>(false)
+  const [askGranolaInitialQuery, setAskGranolaInitialQuery] = useState<string>("")
+  const [shareDialogOpen, setShareDialogOpen] = useState<boolean>(false)
 
   // Keep local state in sync when switching notes
   useEffect(() => {
@@ -160,7 +171,7 @@ export function NoteEditor({
   const currentFolder = folders.find((f) => f.id === note.folderId)
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-6 select-none animate-in fade-in duration-200">
+    <div className="w-full max-w-5xl mx-auto space-y-6 select-none animate-in fade-in duration-200 pb-28">
       {/* 1. Meeting Note Header (Directly Blended) */}
       <header className="space-y-4 border-b border-border/50 pb-5">
         {/* Top Metadata Row */}
@@ -317,6 +328,50 @@ export function NoteEditor({
               <Sparkles className={`size-3.5 ${isEnhancing ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">{isEnhancing ? "Enhancing..." : "Enhance with AI"}</span>
               <span className="sm:hidden">{isEnhancing ? "Enhancing" : "Enhance"}</span>
+            </button>
+
+            {/* Live Transcript Drawer Trigger Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setHighlightTimestamp(null)
+                setTranscriptOpen(true)
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg border border-border/70 bg-background hover:bg-muted/50 text-xs font-medium text-foreground transition cursor-pointer shrink-0"
+              title="View verbatim meeting transcript"
+            >
+              <Volume2 className="size-3.5 text-muted-foreground" />
+              <span className="hidden sm:inline">Transcript</span>
+              {note.transcript && note.transcript.length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted font-mono font-semibold">
+                  {note.transcript.length}
+                </span>
+              )}
+            </button>
+
+            {/* Ask AI Copilot Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setAskGranolaInitialQuery("")
+                setAskGranolaOpen(true)
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg border border-border/70 bg-background hover:bg-muted/50 text-xs font-medium text-foreground transition cursor-pointer shrink-0"
+              title="Ask Granola AI questions about this note"
+            >
+              <Sparkles className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">Ask AI</span>
+            </button>
+
+            {/* Share & Export Button */}
+            <button
+              type="button"
+              onClick={() => setShareDialogOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg border border-border/70 bg-background hover:bg-muted/50 text-xs font-medium text-foreground transition cursor-pointer shrink-0"
+              title="Share or export note (Slack, Email, Markdown, Notion, Linear)"
+            >
+              <Share2 className="size-3.5 text-muted-foreground" />
+              <span className="hidden sm:inline">Share</span>
             </button>
           </div>
         </div>
@@ -564,9 +619,20 @@ export function NoteEditor({
 
             {/* Footer */}
             <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-muted-foreground text-[11px]">
-                Clicking citations lets you verify AI claims against raw audio.
-              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const ts = activeCitation.timestamp
+                  setActiveCitation(null)
+                  setHighlightTimestamp(ts)
+                  setTranscriptOpen(true)
+                }}
+                className="px-2.5 py-1.5 rounded-lg font-medium text-emerald-600 hover:bg-emerald-500/10 transition cursor-pointer flex items-center gap-1"
+              >
+                <span>View in Transcript</span>
+                <ArrowRight className="size-3" />
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -581,6 +647,85 @@ export function NoteEditor({
           </div>
         </div>
       )}
+
+      {/* 4. Bottom Floating AI Chat & Transcript Bar (Granola Signature - Post-meeting) */}
+      {!isRecording && (
+        <div className="sticky bottom-4 z-30 pt-4 flex items-center justify-center pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/80 bg-background/90 dark:bg-zinc-900/90 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all max-w-lg w-full">
+            <button
+              type="button"
+              onClick={() => {
+                setAskGranolaInitialQuery("")
+                setAskGranolaOpen(true)
+              }}
+              className="p-1 rounded-full text-emerald-600 hover:bg-emerald-500/10 transition cursor-pointer"
+              title="Open AI Copilot"
+            >
+              <Sparkles className="size-3.5 shrink-0" />
+            </button>
+            <input
+              type="text"
+              placeholder="Ask Granola anything about this meeting..."
+              className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 border-none outline-none focus:ring-0 p-0"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                  setAskGranolaInitialQuery(e.currentTarget.value.trim())
+                  setAskGranolaOpen(true)
+                  e.currentTarget.value = ""
+                }
+              }}
+            />
+            <div className="h-4 w-px bg-border/80 shrink-0" />
+            <button
+              type="button"
+              onClick={() => {
+                setHighlightTimestamp(null)
+                setTranscriptOpen(true)
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition cursor-pointer shrink-0"
+              title="Toggle Live Transcript"
+            >
+              <Volume2 className="size-3.5" />
+              <span className="hidden sm:inline">Transcript</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Live Transcript Side Drawer (Component #10) */}
+      <LiveTranscriptDrawer
+        open={transcriptOpen}
+        onOpenChange={setTranscriptOpen}
+        transcript={note.transcript}
+        meetingTitle={note.title}
+        isRecording={isRecording}
+        highlightTimestamp={highlightTimestamp}
+        onInsertQuoteToNotes={(quote) => {
+          handleRoughNotesChange(roughNotes ? `${roughNotes}${quote}` : quote.trim())
+        }}
+      />
+
+      {/* 6. Post-Meeting AI Copilot Drawer (Component #15) */}
+      <AskGranolaDrawer
+        open={askGranolaOpen}
+        onOpenChange={setAskGranolaOpen}
+        note={note}
+        initialQuery={askGranolaInitialQuery}
+        onInsertToNotes={(text) => {
+          handleRoughNotesChange(roughNotes ? `${roughNotes}\n\n${text}` : text)
+        }}
+        onJumpToTranscriptTimestamp={(ts) => {
+          setHighlightTimestamp(ts)
+          setTranscriptOpen(true)
+        }}
+      />
+
+      {/* 7. Share & Export Dialog (Components #16 & #17) */}
+      <ShareExportDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        note={note}
+      />
     </div>
   )
 }

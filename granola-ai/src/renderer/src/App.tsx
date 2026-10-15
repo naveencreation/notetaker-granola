@@ -6,6 +6,8 @@ import { CommandPalette } from "@/components/command-palette"
 import { HomeDashboard } from "@/components/home-dashboard"
 import { AudioVisualizerPill } from "@/components/audio-visualizer-pill"
 import { NoteEditor } from "@/components/note-editor"
+import { MeetingDetectedBanner } from "@/components/meeting-detected-banner"
+import { SettingsModal } from "@/components/settings-modal"
 import { Folder } from "lucide-react"
 
 function GranolaWorkspace() {
@@ -14,6 +16,7 @@ function GranolaWorkspace() {
   const [activeView, setActiveView] = useState<string>("home")
   const [isRecording, setIsRecording] = useState<boolean>(true)
   const [searchOpen, setSearchOpen] = useState<boolean>(false)
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
   const [folders, setFolders] = useState<FolderItem[]>([])
   const [recentNotes, setRecentNotes] = useState<RecentNoteItem[]>([])
   const [upcomingMeetings, setUpcomingMeetings] = useState<UpcomingMeetingItem[]>([])
@@ -79,6 +82,8 @@ function GranolaWorkspace() {
     ? folders.find((f) => f.id === activeView.replace("folder:", ""))
     : null
 
+  const liveMeeting = upcomingMeetings.find((m) => m.isLive)
+
   return (
     <DesktopShell
       breadcrumbTitle={breadcrumbTitle}
@@ -88,12 +93,20 @@ function GranolaWorkspace() {
       onSelectView={setActiveView}
       onNewNote={handleNewNote}
       onOpenSearch={() => setSearchOpen(true)}
-      onOpenSettings={() => alert("Component #18 (Settings Modal) goes here!")}
+      onOpenSettings={() => setSettingsOpen(true)}
       folders={folders}
       recentNotes={recentNotes}
       backendMode={backendMode}
       onToggleBackendMode={toggleBackendMode}
     >
+      {liveMeeting && (
+        <MeetingDetectedBanner
+          meeting={liveMeeting}
+          isRecording={isRecording}
+          onTakeNotes={handleTakeNotesForMeeting}
+        />
+      )}
+
       <div className="mx-auto max-w-5xl space-y-6">
         {currentNote ? (
           <NoteEditor
@@ -171,9 +184,16 @@ function GranolaWorkspace() {
         onSelectNote={(noteId) => setActiveView(`note:${noteId}`)}
         onSelectFolder={(folderId) => setActiveView(`folder:${folderId}`)}
         onNewNote={handleNewNote}
-        onOpenSettings={() => alert("Component #18 (Settings Modal) goes here!")}
+        onOpenSettings={() => setSettingsOpen(true)}
         onToggleBackendMode={toggleBackendMode}
         backendMode={backendMode}
+      />
+
+      <SettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        backendMode={backendMode}
+        onToggleBackendMode={toggleBackendMode}
       />
     </DesktopShell>
   )
