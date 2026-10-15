@@ -4,7 +4,9 @@ import { FolderItem, RecentNoteItem, UpcomingMeetingItem } from "@/services/gran
 import { DesktopShell } from "@/components/desktop-shell"
 import { CommandPalette } from "@/components/command-palette"
 import { HomeDashboard } from "@/components/home-dashboard"
-import { FileText, Folder, Mic, Sparkles } from "lucide-react"
+import { AudioVisualizerPill } from "@/components/audio-visualizer-pill"
+import { NoteEditor } from "@/components/note-editor"
+import { Folder } from "lucide-react"
 
 function GranolaWorkspace() {
   const { service, backendMode, toggleBackendMode } = useGranolaService()
@@ -92,34 +94,18 @@ function GranolaWorkspace() {
       backendMode={backendMode}
       onToggleBackendMode={toggleBackendMode}
     >
-      <div className="mx-auto max-w-4xl space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6">
         {currentNote ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1 rounded bg-muted px-2 py-0.5">
-                <FileText className="size-3" /> Note ID: {currentNote.id}
-              </span>
-              <span>•</span>
-              <span>{currentNote.dateLabel}</span>
-              {currentNote.isRecording && (
-                <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                  <Mic className="size-3 animate-pulse" /> Live Session Active
-                </span>
-              )}
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-              {currentNote.title}
-            </h1>
-            <div className="pt-2 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Sparkles className="size-4 text-emerald-600" />
-                <span>Ready for Note Content & AI Enhancement</span>
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                You are viewing this meeting note inside the blended Desktop Shell. Next components ready to hook in: <strong>#7 Floating Mic & Audio Visualizer Pill</strong> and <strong>#12 Dual-Mode Note Editor (Rough vs. Enhanced)</strong>.
-              </p>
-            </div>
-          </div>
+          <NoteEditor
+            note={currentNote}
+            folders={folders}
+            onUpdateNote={(updated) => {
+              setRecentNotes((prev) =>
+                prev.map((n) => (n.id === updated.id ? updated : n))
+              )
+            }}
+            isRecording={isRecording}
+          />
         ) : currentFolder ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -164,6 +150,18 @@ function GranolaWorkspace() {
           />
         )}
       </div>
+
+      <AudioVisualizerPill
+        isRecording={isRecording}
+        onToggleRecord={() => setIsRecording(!isRecording)}
+        onEndAndEnhance={() => {
+          setIsRecording(false)
+          if (!activeView.startsWith("note:") && recentNotes[0]) {
+            setActiveView(`note:${recentNotes[0].id}`)
+          }
+        }}
+        meetingTitle={currentNote?.title}
+      />
 
       <CommandPalette
         open={searchOpen}

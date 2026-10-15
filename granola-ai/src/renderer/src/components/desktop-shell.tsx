@@ -7,6 +7,7 @@ import {
 import { AppSidebar } from "./app-sidebar"
 import { FolderItem, RecentNoteItem } from "@/services/granolaService"
 import { ChevronLeft, ChevronRight, Radio } from "lucide-react"
+import { LiveWaveform } from "@/components/ui/live-waveform"
 
 interface DesktopShellProps {
   children: React.ReactNode
@@ -66,29 +67,40 @@ export function DesktopShell({
             <button
               type="button"
               onClick={onToggleRecord}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition cursor-pointer select-none ${
+              className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium transition cursor-pointer select-none ${
                 isRecording
                   ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 shadow-xs"
                   : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
               }`}
             >
-              <Radio
-                className={`size-3.5 ${
-                  isRecording ? "text-emerald-500 animate-pulse" : "text-muted-foreground"
-                }`}
-              />
-              <span className="hidden sm:inline">
-                {isRecording ? "Listening to Call..." : "Start Transcribing"}
-              </span>
-              <span className="sm:hidden">
-                {isRecording ? "Listening" : "Record"}
-              </span>
+              {isRecording ? (
+                <>
+                  <div className="w-9 h-3.5 flex items-center">
+                    <LiveWaveform
+                      active={true}
+                      barWidth={2}
+                      barGap={1.5}
+                      barRadius={1}
+                      height={12}
+                      barColor="#10b981"
+                    />
+                  </div>
+                  <span className="hidden sm:inline">Listening to Call...</span>
+                  <span className="sm:hidden">Listening</span>
+                </>
+              ) : (
+                <>
+                  <Radio className="size-3.5 text-muted-foreground" />
+                  <span className="hidden sm:inline">Start Transcribing</span>
+                  <span className="sm:hidden">Record</span>
+                </>
+              )}
             </button>
           </div>
         </header>
 
         {/* Main Workspace Canvas */}
-        <main className="flex-1 overflow-y-auto p-6 invisible-scrollbar">{children}</main>
+        <main className="flex-1 overflow-y-auto px-4 py-5 sm:p-6 lg:p-8 invisible-scrollbar">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )

@@ -25,6 +25,29 @@ export interface UpcomingMeetingItem {
   lastMetTitle?: string
 }
 
+export interface CitationItem {
+  id: string
+  timestamp: string
+  speaker: string
+  quote: string
+}
+
+export interface EnhancedNotesData {
+  summary: string
+  keyDecisions: {
+    text: string
+    citation?: CitationItem
+  }[]
+  actionItems: {
+    id: string
+    text: string
+    owner: string
+    completed: boolean
+    citation?: CitationItem
+  }[]
+  nextSteps?: string
+}
+
 export interface RecentNoteItem {
   id: string
   title: string
@@ -33,6 +56,9 @@ export interface RecentNoteItem {
   isRecording?: boolean
   duration?: string
   attendees?: string[]
+  template?: string
+  roughNotes?: string
+  enhancedNotes?: EnhancedNotesData
 }
 
 export interface IGranolaService {
@@ -40,6 +66,7 @@ export interface IGranolaService {
   getRecentNotes(): Promise<RecentNoteItem[]>
   getUpcomingMeetings(): Promise<UpcomingMeetingItem[]>
   createNewNote(title?: string, folderId?: string): Promise<RecentNoteItem>
+  updateNote(noteId: string, updates: Partial<RecentNoteItem>): Promise<RecentNoteItem>
 }
 
 // 1. MOCK BACKEND (Active during frontend development)
@@ -50,9 +77,86 @@ export class MockGranolaService implements IGranolaService {
       title: "Acme Corp — Q4 Enterprise Demo",
       dateLabel: "Just now",
       folderId: "sales",
-      isRecording: true,
+      isRecording: false,
       duration: "14m",
       attendees: ["Sarah Lin", "Dave Miller"],
+      template: "Sales Discovery",
+      roughNotes: `• Dave confirmed VPC peering is complete on AWS us-east-1
+• Need SAML SSO setup by Oct 24 for security compliance
+• Sarah asked about enterprise SLA (99.99%) & custom DPA
+• Pricing proposal: Enterprise Tier ($24,000/yr) for 50 seats
+• Action: send security whitepaper + revised MSA by Friday`,
+      enhancedNotes: {
+        summary:
+          "Acme Corp completed their technical evaluation for the Q4 Enterprise rollout. VPC network isolation is confirmed on AWS us-east-1. The team agreed on a target go-live date of October 24th, pending SAML SSO integration and legal review of the enterprise SLA.",
+        keyDecisions: [
+          {
+            text: "VPC peering successfully configured with AWS us-east-1 production clusters",
+            citation: {
+              id: "c1",
+              timestamp: "04:12",
+              speaker: "Dave Miller",
+              quote:
+                "We finished the VPC peering routes yesterday and latency benchmarks came back under 8ms.",
+            },
+          },
+          {
+            text: "SAML 2.0 SSO rollout scheduled for October 24th with Acme IT team",
+            citation: {
+              id: "c2",
+              timestamp: "08:45",
+              speaker: "Dave Miller",
+              quote:
+                "Let's lock in Oct 24 for the Okta SAML connector so IT can provision user groups in one batch.",
+            },
+          },
+          {
+            text: "Enterprise Tier agreed at $24,000/yr covering 50 seats with 99.99% SLA",
+            citation: {
+              id: "c3",
+              timestamp: "11:20",
+              speaker: "Sarah Lin",
+              quote:
+                "The pricing tier works within our Q4 budget, provided the SLA includes 24/7 dedicated Slack support.",
+            },
+          },
+        ],
+        actionItems: [
+          {
+            id: "a1",
+            text: "Send revised Enterprise MSA and security whitepaper",
+            owner: "You",
+            completed: false,
+            citation: {
+              id: "c4",
+              timestamp: "13:30",
+              speaker: "Sarah Lin",
+              quote:
+                "Send over the updated MSA by Thursday so our legal counsel can turn around revisions by Friday.",
+            },
+          },
+          {
+            id: "a2",
+            text: "Configure Okta SAML metadata XML file in staging",
+            owner: "Dave Miller",
+            completed: true,
+            citation: {
+              id: "c5",
+              timestamp: "12:15",
+              speaker: "Dave Miller",
+              quote:
+                "I'll upload the metadata XML to your staging environment before Monday morning.",
+            },
+          },
+          {
+            id: "a3",
+            text: "Schedule 30m onboarding session for engineering team",
+            owner: "Sarah Lin",
+            completed: false,
+          },
+        ],
+        nextSteps: "Follow up with Sarah on Friday with the signed DPA and scheduling link.",
+      },
     },
     {
       id: "note-2",
@@ -61,6 +165,37 @@ export class MockGranolaService implements IGranolaService {
       folderId: "product",
       duration: "45m",
       attendees: ["Alex Rivera", "Elena Rostova"],
+      template: "Product Sync",
+      roughNotes: `• Elena shared user feedback on the audio visualizer: needs to blend directly, no outer card borders
+• Alex refined dark mode tokens for the sidebar
+• Review command palette fuzzy match performance
+• Decision: Launch v1.2 next Tuesday`,
+      enhancedNotes: {
+        summary:
+          "Reviewed sprint deliverables for the design system overhaul. The team prioritized canvas-blended components over card containers and finalized dark mode tokens.",
+        keyDecisions: [
+          {
+            text: "Adopt canvas-blended design system with invisible scrollbars across all desktop views",
+          },
+          {
+            text: "Schedule v1.2 release for next Tuesday following QA verification",
+          },
+        ],
+        actionItems: [
+          {
+            id: "a4",
+            text: "Refine audio visualizer docking states",
+            owner: "Alex Rivera",
+            completed: true,
+          },
+          {
+            id: "a5",
+            text: "Conduct 5 user usability interviews on transcript citations",
+            owner: "Elena Rostova",
+            completed: false,
+          },
+        ],
+      },
     },
     {
       id: "note-3",
@@ -69,6 +204,10 @@ export class MockGranolaService implements IGranolaService {
       folderId: "1on1",
       duration: "30m",
       attendees: ["Sarah Lin"],
+      template: "1:1 Meeting",
+      roughNotes: `• Sarah feeling confident about the modular service layer pattern
+• Discussed career goals: Staff Engineer path in Q1
+• Feedback: pair programming sessions are going really well`,
     },
     {
       id: "note-4",
@@ -77,6 +216,10 @@ export class MockGranolaService implements IGranolaService {
       folderId: "private",
       duration: "52m",
       attendees: ["Marcus Vance", "Chloe Bennett"],
+      template: "Executive Brief",
+      roughNotes: `• $1.2M ARR run-rate milestone reached
+• Retention is 84% at Month 6
+• Next board meeting set for November 15`,
     },
   ]
 
@@ -181,9 +324,20 @@ export class MockGranolaService implements IGranolaService {
       folderId,
       isRecording: true,
       duration: "0m",
+      roughNotes: "",
     }
     this.notes = [newNote, ...this.notes]
     return newNote
+  }
+
+  async updateNote(noteId: string, updates: Partial<RecentNoteItem>): Promise<RecentNoteItem> {
+    const index = this.notes.findIndex((n) => n.id === noteId)
+    if (index === -1) {
+      throw new Error(`Note not found: ${noteId}`)
+    }
+    const updated = { ...this.notes[index], ...updates }
+    this.notes[index] = updated
+    return updated
   }
 }
 
@@ -213,6 +367,13 @@ export class RealElectronGranolaService implements IGranolaService {
   async createNewNote(title?: string, folderId?: string): Promise<RecentNoteItem> {
     if (window.electron?.ipcRenderer) {
       return await window.electron.ipcRenderer.invoke("granola:create-note", { title, folderId })
+    }
+    throw new Error("Electron IPC not connected yet")
+  }
+
+  async updateNote(noteId: string, updates: Partial<RecentNoteItem>): Promise<RecentNoteItem> {
+    if (window.electron?.ipcRenderer) {
+      return await window.electron.ipcRenderer.invoke("granola:update-note", { noteId, updates })
     }
     throw new Error("Electron IPC not connected yet")
   }
