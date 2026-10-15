@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { ServiceProvider, useGranolaService } from "@/services/ServiceContext"
 import { FolderItem, RecentNoteItem } from "@/services/granolaService"
 import { DesktopShell } from "@/components/desktop-shell"
+import { CommandPalette } from "@/components/command-palette"
 import { FileText, Folder, Mic, Sparkles } from "lucide-react"
 
 function GranolaWorkspace() {
@@ -9,6 +10,7 @@ function GranolaWorkspace() {
 
   const [activeView, setActiveView] = useState<string>("home")
   const [isRecording, setIsRecording] = useState<boolean>(true)
+  const [searchOpen, setSearchOpen] = useState<boolean>(false)
   const [folders, setFolders] = useState<FolderItem[]>([])
   const [recentNotes, setRecentNotes] = useState<RecentNoteItem[]>([])
 
@@ -16,6 +18,18 @@ function GranolaWorkspace() {
     service.getFolders().then(setFolders)
     service.getRecentNotes().then(setRecentNotes)
   }, [service])
+
+  // Global Cmd+K / Ctrl+K keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setSearchOpen((prev) => !prev)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
   const handleNewNote = async () => {
     const created = await service.createNewNote()
@@ -60,7 +74,7 @@ function GranolaWorkspace() {
       activeView={activeView}
       onSelectView={setActiveView}
       onNewNote={handleNewNote}
-      onOpenSearch={() => alert("Component #3 (Cmd+K Search) goes here next!")}
+      onOpenSearch={() => setSearchOpen(true)}
       onOpenSettings={() => alert("Component #18 (Settings Modal) goes here!")}
       folders={folders}
       recentNotes={recentNotes}
@@ -173,6 +187,19 @@ function GranolaWorkspace() {
           </div>
         )}
       </div>
+
+      <CommandPalette
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        recentNotes={recentNotes}
+        folders={folders}
+        onSelectNote={(noteId) => setActiveView(`note:${noteId}`)}
+        onSelectFolder={(folderId) => setActiveView(`folder:${folderId}`)}
+        onNewNote={handleNewNote}
+        onOpenSettings={() => alert("Component #18 (Settings Modal) goes here!")}
+        onToggleBackendMode={toggleBackendMode}
+        backendMode={backendMode}
+      />
     </DesktopShell>
   )
 }
