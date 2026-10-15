@@ -3,11 +3,17 @@ import {
   CitationItem,
   FolderItem,
   RecentNoteItem,
+  TemplateItem,
+  TranscriptSegment,
 } from "@/services/granolaService"
 import { useGranolaService } from "@/services/ServiceContext"
 import { LiveTranscriptDrawer } from "@/components/live-transcript-drawer"
 import { AskGranolaDrawer } from "@/components/ask-granola-drawer"
 import { ShareExportDialog } from "@/components/share-export-dialog"
+import { TemplateBuilderDialog } from "@/components/template-builder-dialog"
+import { AudioPlayerBar } from "@/components/audio-player-bar"
+import { useLiveSpeechRecognition } from "@/hooks/useLiveSpeechRecognition"
+import { soundEngine } from "@/utils/audioCues"
 import {
   Calendar,
   Clock,
@@ -25,6 +31,8 @@ import {
   Volume2,
   ArrowRight,
   Share2,
+  SlidersHorizontal,
+  Play,
 } from "lucide-react"
 
 interface NoteEditorProps {
@@ -66,6 +74,55 @@ export function NoteEditor({
   const [askGranolaOpen, setAskGranolaOpen] = useState<boolean>(false)
   const [askGranolaInitialQuery, setAskGranolaInitialQuery] = useState<string>("")
   const [shareDialogOpen, setShareDialogOpen] = useState<boolean>(false)
+  const [templates, setTemplates] = useState<TemplateItem[]>([])
+  const [templateBuilderOpen, setTemplateBuilderOpen] = useState<boolean>(false)
+  const [audioSeekRequest, setAudioSeekRequest] = useState<{ timestamp: string; nonce: number } | null>(null)
+  const [currentAudioTimestamp, setCurrentAudioTimestamp] = useState<string | null>(null)
+
+  // Load meeting templates
+  useEffect(() => {
+    service.getTemplates().then(setTemplates)
+  }, [service])
+
+  const handleSaveTemplate = async (newTpl: TemplateItem) => {
+    await service.saveTemplate(newTpl)
+    const updated = await service.getTemplates()
+    setTemplates(updated)
+    setSelectedTemplate(newTpl.name)
+  }
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    await service.deleteTemplate(templateId)
+    const updated = await service.getTemplates()
+    setTemplates(updated)
+    if (updated[0]) {
+      setSelectedTemplate(updated[0].name)
+    }
+  }
+
+  // Live Speech-to-Text Recognition from Microphone
+  const { interimText, isListening } = useLiveSpeechRecognition({
+    active: isRecording,
+    onFinalTranscript: (text) => {
+      const currentList = note.transcript || []
+      const mins = Math.floor(currentList.length * 0.4)
+      const secs = (currentList.length * 15) % 60
+      const timestamp = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+
+      const newSegment: TranscriptSegment = {
+        id: `trans-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        timestamp,
+        speaker: "You",
+        isSelf: true,
+        text,
+      }
+
+      onUpdateNote({
+        ...note,
+        transcript: [...currentList, newSegment],
+      })
+    },
+  })
 
   // Keep local state in sync when switching notes
   useEffect(() => {
@@ -87,6 +144,107 @@ export function NoteEditor({
     setRoughNotes(newText)
     const updated = await service.updateNote(note.id, { roughNotes: newText })
     onUpdateNote(updated)
+  }
+
+  // Smart keyboard handling for rough scratchpad (Markdown & Bullets)
+  const handleRoughNotesKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget
+    const { selectionStart, selectionEnd, value } = textarea
+
+    // Cmd+B / Ctrl+B for Bold
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+      e.preventDefault()
+      const selected = value.slice(selectionStart, selectionEnd)
+      const replacement = `**${selected || "bold text"}**`
+      const nextVal = value.slice(0, selectionStart) + replacement + value.slice(selectionEnd)
+      handleRoughNotesChange(nextVal)
+      setTimeout(() => {
+        textarea.selectionStart = selectionStart + 2
+        textarea.selectionEnd = selectionStart + 2 + (selected ? selected.length : 9)
+      }, 0)
+      return
+    }
+
+    // Cmd+I / Ctrl+I for Italic
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") {
+      e.preventDefault()
+      const selected = value.slice(selectionStart, selectionEnd)
+      const replacement = `*${selected || "italic text"}*`
+      const nextVal = value.slice(0, selectionStart) + replacement + value.slice(selectionEnd)
+      handleRoughNotesChange(nextVal)
+      setTimeout(() => {
+        textarea.selectionStart = selectionStart + 1
+        textarea.selectionEnd = selectionStart + 1 + (selected ? selected.length : 11)
+      }, 0)
+      return
+    }
+
+    // Tab for 2-space indentation
+    if (e.key === "Tab") {
+      e.preventDefault()
+      const indent = "  "
+      const nextVal = value.slice(0, selectionStart) + indent + value.slice(selectionEnd)
+      handleRoughNotesChange(nextVal)
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = selectionStart + indent.length
+      }, 0)
+      return
+    }
+
+    // Enter for bullet and checklist auto-continuation
+    if (e.key === "Enter") {
+      const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1
+      const currentLine = value.slice(lineStart, selectionStart)
+
+      // Match bullets, numbered lists, and checkboxes
+      const match = currentLine.match(/^(\s*)(•\s|- \[ \]\s|\[ \]\s|-\s|\*\s|\d+\.\s)/)
+      if (match) {
+        e.preventDefault()
+        const [, indent, marker] = match
+
+        // Empty bullet clears the line (cancels list on double Enter)
+        if (currentLine.trim() === marker.trim()) {
+          const nextVal = value.slice(0, lineStart) + value.slice(selectionStart)
+          handleRoughNotesChange(nextVal)
+          setTimeout(() => {
+            textarea.selectionStart = textarea.selectionEnd = lineStart
+          }, 0)
+          return
+        }
+
+        let nextMarker = marker
+        const numMatch = marker.match(/^(\d+)\.\s$/)
+        if (numMatch) {
+          nextMarker = `${parseInt(numMatch[1], 10) + 1}. `
+        }
+
+        const insertion = `\n${indent}${nextMarker}`
+        const nextVal = value.slice(0, selectionStart) + insertion + value.slice(selectionEnd)
+        handleRoughNotesChange(nextVal)
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = selectionStart + insertion.length
+        }, 0)
+      }
+    }
+  }
+
+  // Quick 1-click format chips
+  const insertFormatting = (prefix: string, suffix = "") => {
+    const textarea = document.getElementById("rough-notes-textarea") as HTMLTextAreaElement | null
+    if (!textarea) {
+      handleRoughNotesChange(roughNotes ? `${roughNotes}\n${prefix}` : prefix)
+      return
+    }
+    const { selectionStart, selectionEnd, value } = textarea
+    const selected = value.slice(selectionStart, selectionEnd)
+    const replacement = `${prefix}${selected}${suffix}`
+    const nextVal = value.slice(0, selectionStart) + replacement + value.slice(selectionEnd)
+    handleRoughNotesChange(nextVal)
+    setTimeout(() => {
+      textarea.focus()
+      textarea.selectionStart = selectionStart + prefix.length
+      textarea.selectionEnd = selectionStart + prefix.length + selected.length
+    }, 0)
   }
 
   const handleToggleActionItem = async (itemId: string) => {
@@ -157,6 +315,7 @@ export function NoteEditor({
       })
       onUpdateNote(updated)
       setIsEnhancing(false)
+      soundEngine.playEnhanceDone()
     }, 2200)
   }
 
@@ -305,19 +464,41 @@ export function NoteEditor({
                 value={selectedTemplate}
                 onChange={(e) => {
                   const t = e.target.value
+                  if (t === "__custom_builder__") {
+                    setTemplateBuilderOpen(true)
+                    return
+                  }
                   setSelectedTemplate(t)
                   handleTriggerEnhance(t)
                 }}
                 className="appearance-none pl-2.5 pr-7 py-1 rounded-lg border border-border/70 bg-background text-xs font-medium text-foreground hover:bg-muted/50 transition cursor-pointer outline-none max-w-[170px] sm:max-w-none truncate"
               >
-                {TEMPLATES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
+                {templates.length > 0
+                  ? templates.map((t) => (
+                      <option key={t.id || t.name} value={t.name}>
+                        {t.icon ? `${t.icon} ` : ""}{t.name}
+                      </option>
+                    ))
+                  : TEMPLATES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                <option disabled>──────────</option>
+                <option value="__custom_builder__">⚙️ Manage Templates...</option>
               </select>
               <ChevronDown className="size-3 text-muted-foreground absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
+
+            <button
+              type="button"
+              onClick={() => setTemplateBuilderOpen(true)}
+              className="p-1.5 rounded-lg border border-border/70 bg-background hover:bg-muted/50 text-muted-foreground hover:text-foreground transition cursor-pointer shrink-0"
+              title="Customize Templates & AI Prompts"
+              aria-label="Customize Templates"
+            >
+              <SlidersHorizontal className="size-3.5" />
+            </button>
 
             <button
               type="button"
@@ -338,10 +519,13 @@ export function NoteEditor({
                 setTranscriptOpen(true)
               }}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg border border-border/70 bg-background hover:bg-muted/50 text-xs font-medium text-foreground transition cursor-pointer shrink-0"
-              title="View verbatim meeting transcript"
+              title={isListening ? "Listening to mic... click to view transcript" : "View verbatim meeting transcript"}
             >
-              <Volume2 className="size-3.5 text-muted-foreground" />
+              <Volume2 className={`size-3.5 ${isListening ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
               <span className="hidden sm:inline">Transcript</span>
+              {isListening && (
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-ping" />
+              )}
               {note.transcript && note.transcript.length > 0 && (
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted font-mono font-semibold">
                   {note.transcript.length}
@@ -377,6 +561,19 @@ export function NoteEditor({
         </div>
       </header>
 
+      {/* Audio Playback & Transcript Scrubber Bar (Component #20) */}
+      {!isRecording && note.transcript && note.transcript.length > 0 && (
+        <AudioPlayerBar
+          transcript={note.transcript}
+          meetingTitle={note.title}
+          durationFormatted={note.duration}
+          seekRequest={audioSeekRequest}
+          onTimeUpdate={(_sec, formatted) => setCurrentAudioTimestamp(formatted)}
+          onToggleTranscript={() => setTranscriptOpen((prev) => !prev)}
+          isTranscriptOpen={transcriptOpen}
+        />
+      )}
+
       {/* 2. Dual Canvas (Rough Notes vs. Enhanced Notes) */}
       <div
         className={`grid gap-4 lg:gap-6 ${
@@ -387,21 +584,90 @@ export function NoteEditor({
       >
         {/* Left Pane: Your Rough Notes Scratchpad */}
         {(viewMode === "split" || viewMode === "rough") && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pb-0.5">
               <div className="flex items-center gap-1.5 font-semibold text-foreground/85">
                 <FileEdit className="size-3.5 text-muted-foreground" />
                 <span>Your Rough Notes</span>
               </div>
-              <span className="text-[11px] font-mono">
-                {roughNotes.length} chars
-              </span>
+
+              {/* Word & Char counter + Auto-save indicator */}
+              <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
+                <span>
+                  {roughNotes.trim() ? roughNotes.trim().split(/\s+/).length : 0} words
+                </span>
+                <span>•</span>
+                <span>{roughNotes.length} chars</span>
+                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-sans">
+                  <Check className="size-2.5" />
+                  <span>Saved</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Markdown Format Chips */}
+            <div className="flex items-center gap-1 overflow-x-auto invisible-scrollbar pb-1 text-xs">
+              <button
+                type="button"
+                onClick={() => insertFormatting("• ")}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md border border-border/60 bg-background hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground transition cursor-pointer shrink-0"
+                title="Add bullet point (Enter to continue)"
+              >
+                <span>•</span>
+                <span>Bullet</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => insertFormatting("- [ ] ")}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md border border-border/60 bg-background hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground transition cursor-pointer shrink-0"
+                title="Add checklist task"
+              >
+                <CheckSquare className="size-2.5" />
+                <span>Task</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => insertFormatting("## ")}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md border border-border/60 bg-background hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground transition cursor-pointer shrink-0"
+                title="Add section heading"
+              >
+                <span className="font-mono text-[10px]">H2</span>
+                <span>Section</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => insertFormatting("> ")}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md border border-border/60 bg-background hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground transition cursor-pointer shrink-0"
+                title="Add blockquote"
+              >
+                <Quote className="size-2.5" />
+                <span>Quote</span>
+              </button>
+              <div className="h-3 w-px bg-border/60 mx-1 shrink-0" />
+              <button
+                type="button"
+                onClick={() => insertFormatting("**", "**")}
+                className="px-1.5 py-0.5 rounded border border-border/50 bg-background hover:bg-muted text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+                title="Bold (Cmd+B)"
+              >
+                B
+              </button>
+              <button
+                type="button"
+                onClick={() => insertFormatting("*", "*")}
+                className="px-1.5 py-0.5 rounded border border-border/50 bg-background hover:bg-muted text-[10px] italic font-serif text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+                title="Italic (Cmd+I)"
+              >
+                I
+              </button>
             </div>
 
             <textarea
+              id="rough-notes-textarea"
               aria-label="Your rough meeting notes"
               value={roughNotes}
               onChange={(e) => handleRoughNotesChange(e.target.value)}
+              onKeyDown={handleRoughNotesKeyDown}
               placeholder="Take quick bullet points, action items, or shorthand notes during your meeting. Granola will merge them with the verbatim audio transcript..."
               className="w-full min-h-[320px] md:min-h-[480px] p-3.5 sm:p-4 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/30 focus:bg-background text-sm font-sans leading-relaxed text-foreground placeholder:text-muted-foreground/40 outline-none transition resize-none focus:border-border"
             />
@@ -618,20 +884,36 @@ export function NoteEditor({
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between text-xs pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const ts = activeCitation.timestamp
-                  setActiveCitation(null)
-                  setHighlightTimestamp(ts)
-                  setTranscriptOpen(true)
-                }}
-                className="px-2.5 py-1.5 rounded-lg font-medium text-emerald-600 hover:bg-emerald-500/10 transition cursor-pointer flex items-center gap-1"
-              >
-                <span>View in Transcript</span>
-                <ArrowRight className="size-3" />
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ts = activeCitation.timestamp
+                    setAudioSeekRequest({ timestamp: ts, nonce: Date.now() })
+                    setActiveCitation(null)
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg font-medium text-emerald-600 hover:bg-emerald-500/10 transition cursor-pointer flex items-center gap-1"
+                  title="Play recorded audio from this timestamp"
+                >
+                  <Play className="size-3 fill-current" />
+                  <span>Play from {activeCitation.timestamp}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ts = activeCitation.timestamp
+                    setActiveCitation(null)
+                    setHighlightTimestamp(ts)
+                    setTranscriptOpen(true)
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>Transcript</span>
+                  <ArrowRight className="size-3" />
+                </button>
+              </div>
 
               <button
                 type="button"
@@ -699,7 +981,10 @@ export function NoteEditor({
         transcript={note.transcript}
         meetingTitle={note.title}
         isRecording={isRecording}
+        interimText={interimText}
         highlightTimestamp={highlightTimestamp}
+        activeTimestamp={currentAudioTimestamp}
+        onSeekAudio={(ts) => setAudioSeekRequest({ timestamp: ts, nonce: Date.now() })}
         onInsertQuoteToNotes={(quote) => {
           handleRoughNotesChange(roughNotes ? `${roughNotes}${quote}` : quote.trim())
         }}
@@ -725,6 +1010,20 @@ export function NoteEditor({
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
         note={note}
+      />
+
+      {/* 8. Template Builder & Prompt Editor Dialog (Component #19) */}
+      <TemplateBuilderDialog
+        open={templateBuilderOpen}
+        onOpenChange={setTemplateBuilderOpen}
+        templates={templates}
+        onSaveTemplate={handleSaveTemplate}
+        onDeleteTemplate={handleDeleteTemplate}
+        activeTemplateName={selectedTemplate}
+        onSelectTemplate={(name) => {
+          setSelectedTemplate(name)
+          handleTriggerEnhance(name)
+        }}
       />
     </div>
   )

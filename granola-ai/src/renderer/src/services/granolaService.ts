@@ -70,12 +70,25 @@ export interface RecentNoteItem {
   transcript?: TranscriptSegment[]
 }
 
+export interface TemplateItem {
+  id: string
+  name: string
+  icon?: string
+  description: string
+  promptInstructions: string
+  sections: string[]
+  isCustom?: boolean
+}
+
 export interface IGranolaService {
   getFolders(): Promise<FolderItem[]>
   getRecentNotes(): Promise<RecentNoteItem[]>
   getUpcomingMeetings(): Promise<UpcomingMeetingItem[]>
   createNewNote(title?: string, folderId?: string): Promise<RecentNoteItem>
   updateNote(noteId: string, updates: Partial<RecentNoteItem>): Promise<RecentNoteItem>
+  getTemplates(): Promise<TemplateItem[]>
+  saveTemplate(template: TemplateItem): Promise<TemplateItem>
+  deleteTemplate(templateId: string): Promise<void>
 }
 
 // 1. MOCK BACKEND (Active during frontend development)
@@ -373,6 +386,59 @@ export class MockGranolaService implements IGranolaService {
     },
   ]
 
+  private templates: TemplateItem[] = [
+    {
+      id: "sales-discovery",
+      name: "Sales Discovery",
+      icon: "🎯",
+      description: "Extract budget, authority, need, timeline (BANT), and client objections.",
+      promptInstructions:
+        "Synthesize the prospect's core business pain points, evaluate urgency, document budget numbers mentioned, and list client stakeholder objections.",
+      sections: ["Executive Summary", "Customer Pain Points", "Key Decisions & Commitments", "Pricing & Budget", "Action Items"],
+      isCustom: false,
+    },
+    {
+      id: "product-sync",
+      name: "Product Sync",
+      icon: "🚀",
+      description: "Technical scope, architecture decisions, blockers, and milestone commitments.",
+      promptInstructions:
+        "Focus on technical decisions, API contract changes, cross-team dependencies, blocker resolution, and sprint deadlines.",
+      sections: ["Executive Summary", "Architecture Decisions", "Technical Blockers", "Sprint Deliverables"],
+      isCustom: false,
+    },
+    {
+      id: "one-on-one",
+      name: "1:1 Meeting",
+      icon: "👥",
+      description: "Career growth, personal check-in, feedback, and mutual commitments.",
+      promptInstructions:
+        "Capture personal energy/morale, projects discussed, feedback exchanged, career aspirations, and bilateral follow-up tasks.",
+      sections: ["Check-in & Morale", "Progress & Wins", "Feedback & Challenges", "Action Items"],
+      isCustom: false,
+    },
+    {
+      id: "executive-brief",
+      name: "Executive Brief",
+      icon: "📊",
+      description: "High-level strategic briefing for executive stakeholders and leadership.",
+      promptInstructions:
+        "Extract high-level business impact, strategic alignment, critical metrics/KPIs, and executive decision signoffs.",
+      sections: ["Strategic Summary", "Key Decisions", "Resource & Budget Allocation", "Immediate Next Steps"],
+      isCustom: false,
+    },
+    {
+      id: "user-interview",
+      name: "User Research Interview",
+      icon: "💡",
+      description: "Extract customer quotes, usability friction, feature requests, and workflow pain points.",
+      promptInstructions:
+        "Distill the participant's background, highlight direct quotes expressing frustration or delight, and summarize requested product improvements.",
+      sections: ["Participant Background", "Workflow Friction", "Feature Requests & Quotes", "Research Takeaways"],
+      isCustom: false,
+    },
+  ]
+
   async getFolders(): Promise<FolderItem[]> {
     return [
       { id: "sales", name: "Sales Discovery", noteCount: 12, isShared: true },
@@ -413,6 +479,24 @@ export class MockGranolaService implements IGranolaService {
     this.notes[index] = updated
     return updated
   }
+
+  async getTemplates(): Promise<TemplateItem[]> {
+    return [...this.templates]
+  }
+
+  async saveTemplate(template: TemplateItem): Promise<TemplateItem> {
+    const idx = this.templates.findIndex((t) => t.id === template.id)
+    if (idx >= 0) {
+      this.templates[idx] = template
+    } else {
+      this.templates.push(template)
+    }
+    return template
+  }
+
+  async deleteTemplate(templateId: string): Promise<void> {
+    this.templates = this.templates.filter((t) => t.id !== templateId)
+  }
 }
 
 // 2. REAL ELECTRON / API BACKEND (Ready to swap in with 1 click)
@@ -450,5 +534,25 @@ export class RealElectronGranolaService implements IGranolaService {
       return await window.electron.ipcRenderer.invoke("granola:update-note", { noteId, updates })
     }
     throw new Error("Electron IPC not connected yet")
+  }
+
+  async getTemplates(): Promise<TemplateItem[]> {
+    if (window.electron?.ipcRenderer) {
+      return await window.electron.ipcRenderer.invoke("granola:get-templates")
+    }
+    return new MockGranolaService().getTemplates()
+  }
+
+  async saveTemplate(template: TemplateItem): Promise<TemplateItem> {
+    if (window.electron?.ipcRenderer) {
+      return await window.electron.ipcRenderer.invoke("granola:save-template", template)
+    }
+    return template
+  }
+
+  async deleteTemplate(templateId: string): Promise<void> {
+    if (window.electron?.ipcRenderer) {
+      await window.electron.ipcRenderer.invoke("granola:delete-template", templateId)
+    }
   }
 }

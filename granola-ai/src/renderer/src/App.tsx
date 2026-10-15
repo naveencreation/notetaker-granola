@@ -8,13 +8,14 @@ import { AudioVisualizerPill } from "@/components/audio-visualizer-pill"
 import { NoteEditor } from "@/components/note-editor"
 import { MeetingDetectedBanner } from "@/components/meeting-detected-banner"
 import { SettingsModal } from "@/components/settings-modal"
+import { soundEngine } from "@/utils/audioCues"
 import { Folder } from "lucide-react"
 
 function GranolaWorkspace() {
   const { service, backendMode, toggleBackendMode } = useGranolaService()
 
   const [activeView, setActiveView] = useState<string>("home")
-  const [isRecording, setIsRecording] = useState<boolean>(true)
+  const [isRecording, setIsRecording] = useState<boolean>(false)
   const [searchOpen, setSearchOpen] = useState<boolean>(false)
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
   const [folders, setFolders] = useState<FolderItem[]>([])
@@ -39,12 +40,22 @@ function GranolaWorkspace() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
+  const handleToggleRecord = () => {
+    setIsRecording((prev) => {
+      const next = !prev
+      if (next) soundEngine.playRecordStart()
+      else soundEngine.playRecordStop()
+      return next
+    })
+  }
+
   const handleNewNote = async () => {
     const created = await service.createNewNote()
     const updated = await service.getRecentNotes()
     setRecentNotes(updated)
     setActiveView(`note:${created.id}`)
     setIsRecording(true)
+    soundEngine.playRecordStart()
   }
 
   const handleTakeNotesForMeeting = async (meeting: UpcomingMeetingItem) => {
@@ -53,6 +64,7 @@ function GranolaWorkspace() {
     setRecentNotes(updated)
     setActiveView(`note:${created.id}`)
     setIsRecording(true)
+    soundEngine.playRecordStart()
   }
 
   // Dynamic breadcrumb label
@@ -88,7 +100,7 @@ function GranolaWorkspace() {
     <DesktopShell
       breadcrumbTitle={breadcrumbTitle}
       isRecording={isRecording}
-      onToggleRecord={() => setIsRecording(!isRecording)}
+      onToggleRecord={handleToggleRecord}
       activeView={activeView}
       onSelectView={setActiveView}
       onNewNote={handleNewNote}
@@ -166,9 +178,10 @@ function GranolaWorkspace() {
 
       <AudioVisualizerPill
         isRecording={isRecording}
-        onToggleRecord={() => setIsRecording(!isRecording)}
+        onToggleRecord={handleToggleRecord}
         onEndAndEnhance={() => {
           setIsRecording(false)
+          soundEngine.playRecordStop()
           if (!activeView.startsWith("note:") && recentNotes[0]) {
             setActiveView(`note:${recentNotes[0].id}`)
           }

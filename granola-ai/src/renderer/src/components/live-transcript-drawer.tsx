@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Sheet,
   SheetContent,
@@ -24,8 +24,11 @@ interface LiveTranscriptDrawerProps {
   transcript?: TranscriptSegment[]
   meetingTitle?: string
   isRecording?: boolean
+  interimText?: string
   onInsertQuoteToNotes?: (quote: string) => void
   highlightTimestamp?: string | null
+  activeTimestamp?: string | null
+  onSeekAudio?: (timestamp: string) => void
 }
 
 export function LiveTranscriptDrawer({
@@ -34,8 +37,11 @@ export function LiveTranscriptDrawer({
   transcript = [],
   meetingTitle = "Meeting Note",
   isRecording = false,
+  interimText,
   onInsertQuoteToNotes,
   highlightTimestamp,
+  activeTimestamp,
+  onSeekAudio,
 }: LiveTranscriptDrawerProps) {
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [speakerFilter, setSpeakerFilter] = useState<"all" | "self" | "others">("all")
@@ -43,20 +49,29 @@ export function LiveTranscriptDrawer({
   const [copiedAll, setCopiedAll] = useState<boolean>(false)
   const [insertedId, setInsertedId] = useState<string | null>(null)
   const [playingSegId, setPlayingSegId] = useState<string | null>(null)
+  const feedBottomRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to highlighted citation timestamp
+  // Auto-scroll to latest speech during active recording
   useEffect(() => {
-    if (!open || !highlightTimestamp) {
+    if (open && isRecording) {
+      feedBottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [open, isRecording, transcript.length, interimText])
+
+  // Auto-scroll to highlighted citation timestamp or active playing timestamp
+  useEffect(() => {
+    const target = highlightTimestamp || activeTimestamp
+    if (!open || !target) {
       return undefined
     }
     const timer = setTimeout(() => {
-      const el = document.getElementById(`seg-${highlightTimestamp}`)
+      const el = document.getElementById(`seg-${target}`)
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" })
       }
     }, 250)
     return () => clearTimeout(timer)
-  }, [open, highlightTimestamp])
+  }, [open, highlightTimestamp, activeTimestamp])
 
   // Reset playing simulation after 3.5 seconds
   useEffect(() => {
@@ -223,10 +238,12 @@ export function LiveTranscriptDrawer({
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 invisible-scrollbar">
           {filteredSegments.length > 0 ? (
             filteredSegments.map((seg) => {
-              const isHighlighted = highlightTimestamp === seg.timestamp
+              const isHighlighted =
+                highlightTimestamp === seg.timestamp || activeTimestamp === seg.timestamp
               const isCopied = copiedId === seg.id
               const isInserted = insertedId === seg.id
-              const isPlaying = playingSegId === seg.id
+              const isPlaying =
+                activeTimestamp === seg.timestamp || playingSegId === seg.id
 
               return (
                 <div
@@ -272,15 +289,19 @@ export function LiveTranscriptDrawer({
                       {/* Audio Playback Toggle */}
                       <button
                         type="button"
-                        onClick={() =>
-                          setPlayingSegId(isPlaying ? null : seg.id)
-                        }
+                        onClick={() => {
+                          if (onSeekAudio) {
+                            onSeekAudio(seg.timestamp)
+                          } else {
+                            setPlayingSegId(isPlaying ? null : seg.id)
+                          }
+                        }}
                         className={`p-1 rounded transition cursor-pointer ${
                           isPlaying
                             ? "bg-emerald-500/15 text-emerald-600"
                             : "text-muted-foreground/60 hover:text-foreground"
                         }`}
-                        title={isPlaying ? "Pause audio" : "Listen to audio segment"}
+                        title={isPlaying ? "Playing audio" : "Seek audio to this segment"}
                       >
                         {isPlaying ? (
                           <div className="flex items-center gap-0.5 h-3 px-1">
@@ -293,9 +314,14 @@ export function LiveTranscriptDrawer({
                         )}
                       </button>
 
-                      <span className="text-[10px] font-mono text-muted-foreground/75">
+                      <button
+                        type="button"
+                        onClick={() => onSeekAudio?.(seg.timestamp)}
+                        className="text-[10px] font-mono text-muted-foreground/75 hover:text-emerald-600 transition cursor-pointer"
+                        title="Seek audio to timestamp"
+                      >
                         {seg.timestamp}
-                      </span>
+                      </button>
 
                       {/* Bubble Actions on Hover */}
                       <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity">
@@ -343,6 +369,25 @@ export function LiveTranscriptDrawer({
               <span>No transcript segments match "{searchQuery}"</span>
             </div>
           )}
+
+          {/* Live Streaming Speech Bubble */}
+          {isRecording && interimText && (
+            <div className="rounded-xl p-3.5 bg-emerald-500/10 border border-emerald-500/30 animate-pulse transition-all">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="size-5 rounded-full bg-emerald-500/20 text-emerald-600 flex items-center justify-center">
+                  <Mic className="size-3 animate-spin" />
+                </span>
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  You (Speaking now...)
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm leading-relaxed text-foreground/90 italic font-sans">
+                "{interimText}..."
+              </p>
+            </div>
+          )}
+
+          <div ref={feedBottomRef} />
         </div>
 
         {/* Drawer Footer Status */}
